@@ -1,4 +1,0 @@
-{
-    kms: true,
-    implementation: "nvidia"
-}

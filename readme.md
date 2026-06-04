@@ -1,61 +1,95 @@
-# ![](https://fonts.gstatic.com/s/i/materialiconsoutlined/flare/v1/24px.svg) Protheus
+# Protheus OS
 
-A robust operating system to help prepare for deep AI, bridge the gaps in global sustainability and be ready for the post-quantum world with blockchain at core.
+**A freestanding RISC-V microkernel with capability-gated IPC for blockchain workloads.**
 
-The platform is built around the Linux Kernel. It is designed to motivate innovation at its fullest within open and healthy communities in software engineering and industries that will need a robust core to build and run solutions on.
+> Author: m26steph@uwaterloo.ca  
+> Credits: Nicolae Carabut (Dispatch Labs) — architectural inspiration  
+> License: [The Free License](https://github.com/codemodify/TheFreeLicense)
 
-It empowers researchers, innovators, disruptors, daily users and enterprize to get to the next level.
+---
 
-At the moment to abstract away complexities it leverages the facilities of [Arch Linux](https://www.archlinux.org) in terms of booting, installing initial libraries and the core of the OS.
+## Architecture
 
-To give an idea how to describe it in simple words at the moment it features
-- Privacy and safety oriented from ground up
-- ABS concepts from Arch
-- Versioning concepts from Nix OS
-- Sanboxing concepts from Qubes OS / Docker / Kubernetes
-- Extensibility and development platform for the modern world with best practices in engineering
+```
+seL4 / Genode (long-term target)
+│
+├── kernel/          ← RISC-V rv32ima microkernel (SV32 paging, VirtIO-blk, TAR fs)
+│   ├── common.{h,c} ← freestanding types, string, printf
+│   ├── kernel.{h,c} ← scheduler, page tables, IPC, syscalls, boot
+│   └── kernel.ld    ← linker script (QEMU virt, 0x80200000)
+│
+├── crypto/
+│   ├── sha256.h     ← FIPS 180-4, header-only (lives in crypto_service only)
+│   └── ed25519.h    ← Ed25519 stub (replace with Monocypher/SUPERCOP ref10)
+│
+└── services/
+    ├── crypto/      ← crypto_service  (CAP_LOG only — key material stays here)
+    ├── kv_store/    ← kv_store        (CAP_LOG only — FNV-1a hash table)
+    ├── network/     ← network_service (CAP_LOG | CAP_TIMER — untrusted relay)
+    └── monerod/     ← monerod         (CAP_ALL — orchestrator, sole inter-service router)
+```
 
+### IPC / Capability model
 
+Every cross-service call is mediated by the kernel via `do_ipc_call`.  
+The caller blocks; the target becomes runnable; on return the reply is copied back.
 
-# ![](https://fonts.gstatic.com/s/i/materialicons/help_outline/v1/24px.svg) Dox - Concepts
-The concept works like this
-- If you need a change then modify the template and apply it.
-- If you need a need a run-time change then use the API to apply the change until next reboot.
-- `Templates` is where all the blueprints are set then a system image is generated from.
+| Service          | Capabilities                              |
+|------------------|-------------------------------------------|
+| crypto_service   | `CAP_LOG`                                 |
+| kv_store         | `CAP_LOG`                                 |
+| network_service  | `CAP_LOG \| CAP_TIMER`                    |
+| monerod          | `CAP_CRYPTO \| CAP_KVSTORE \| CAP_NETWORK \| CAP_TIMER \| CAP_LOG` |
 
+An attacker who achieves RCE in `network_service` cannot reach `crypto_service` — there is no capability route.
 
+### Data flow
 
-# ![](https://fonts.gstatic.com/s/i/materialicons/help_outline/v1/24px.svg) Dox - Details
-- `/System`
-	- Is where the core os binaries and config files reside. A read-only partition/folder.
-	- Provides an object model/api to all hardware abstraction layers and runtime configurations to read/write.
-- `/SystemData`
-	- Is where the system logs and temp files are
-- `/Contrib`
-	- Is where all the software lands with their configs and data
-- `/Templates`
-	- `/System`
-		- `/Boot`
-		- `/Kernel`
-		- `/Audio`
-		- `/Video`
-		- `/Keyboard`
-		- `/Mouse`
-	- `/SystemData`
-		- `Logs`
-		- `TempFiles`
-	- `/Contrib`
-		- `/SystemOverlay`
-			- `Arch`
-			- `Ubuntu`
-			- `FreeBSD`
-			- `Windows`
-			- `Mac`
+```
+network_service ──(raw block/TX)──► monerod
+monerod ──(SHA-256 / Ed25519)─────► crypto_service
+monerod ──(store block/mempool)───► kv_store
+monerod ──(broadcast signed TX)───► network_service
+```
 
+### MLIR compilation path (planned)
 
+```
+Lean 4 source
+  └─ Lean IR
+       └─ MLIR (custom high-level dialect)
+            └─ MLIR lowering passes
+                 └─ LLVM IR
+                      └─ riscv32 machine code
+```
 
-# ![](https://fonts.gstatic.com/s/i/materialiconsoutlined/history/v1/24px.svg) Past History
+This path enables formal proofs in Lean 4 to be compiled to the same binary running on this kernel, bridging formal verification with the capability-enforced isolation layer.
 
-The story goes like this: around 1998 there was a guy dreaming about an integrated platform that will interact with existing radio based network devices in a transparent manner. Overtime the project was an on/off thing and finally was made public here https://github.com/codemodify/freebsddistro while continuing to research about cloud based services for the enterprise in early 2000s as a must have for the platform to exist.
+---
 
-That guy is me and I'm back at it seems.
+## Build & Run
+
+```bash
+# Prerequisites (Debian/Ubuntu example)
+sudo apt install clang lld qemu-system-riscv
+
+# Build
+make
+
+# Run under QEMU
+make run
+
+# GDB debug
+make qemu-debug   # then: riscv32-elf-gdb protheus.elf -ex "target remote :1234"
+```
+
+---
+
+## Production TODOs
+
+- Replace `ed25519.h` stub with [Monocypher](https://monocypher.org/) (CC0, audited).
+- Replace `network_service` stub block/TX with real Monero P2P wire protocol (Boost.Serialization / levin).
+- Port to seL4 + Genode for formally-verified microkernel guarantees.
+- Integrate Zig stdlib's generated (Coq-derived) crypto for post-quantum primitives.
+- Add a hardware entropy source (RISC-V TRNG extension or TPM) for key seeding.
+- Persistent kv_store: flush to VirtIO disk via a dedicated file in the TAR image.
