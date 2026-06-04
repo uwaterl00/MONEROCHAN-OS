@@ -3,7 +3,6 @@
 
 **Author:** m26steph@uwaterloo.ca  
 **Based on ideas from:** Nicolae Carabut at Dispatch Labs (past donor)  
-**License:** The Free License (https://github.com/codemodify/TheFreeLicense)
 
 ---
 
