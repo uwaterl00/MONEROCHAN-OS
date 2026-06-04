@@ -4,8 +4,6 @@
 
 > Author: m26steph@uwaterloo.ca  
 > Credits: Nicolae Carabut (Dispatch Labs) — architectural inspiration  
-> License: [The Free License](https://github.com/codemodify/TheFreeLicense)
-
 ---
 
 ## Architecture
