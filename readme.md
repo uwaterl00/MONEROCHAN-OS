@@ -1,4 +1,4 @@
-# Protheus OS
+# MONEROCHAN OS
 
 **A freestanding RISC-V microkernel with capability-gated IPC for blockchain workloads.**
 
